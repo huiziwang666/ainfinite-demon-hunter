@@ -4,7 +4,7 @@ import { AudioEngine } from '../services/audioService';
 
 // Game constants
 const MAX_LIVES = 3;
-const VICTORY_KILLS = 30;
+const VICTORY_KILLS = 20;
 const DEMON_ESCAPE_TIME = 5000; // 5 seconds before demon escapes
 
 // --- Configuration & Helpers ---
@@ -446,6 +446,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected }) => {
   const [lives, setLives] = useState(MAX_LIVES);
   const [gameOver, setGameOver] = useState(false);
   const [victory, setVictory] = useState(false);
+  const gameOverRef = useRef(false);
+  const victoryRef = useRef(false);
   const victorySoundPlayed = useRef(false);
   const gameOverSoundPlayed = useRef(false);
 
@@ -614,7 +616,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected }) => {
   };
 
   // Kill demons near an explosion point
-  const killDemonsNearPoint = (x: number, y: number, radius: number = 120) => {
+  const killDemonsNearPoint = (x: number, y: number, radius: number = 150) => {
     const now = Date.now();
     let killsThisFrame = 0;
 
@@ -658,8 +660,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected }) => {
 
   // Check for victory condition
   const checkVictory = () => {
-    if (killCount.current >= VICTORY_KILLS && !victory && !victorySoundPlayed.current) {
+    if (killCount.current >= VICTORY_KILLS && !victoryRef.current && !victorySoundPlayed.current) {
       victorySoundPlayed.current = true;
+      victoryRef.current = true; // Set ref immediately for synchronous check
       setVictory(true);
       // Stop background music
       if (bgMusicRef.current) {
@@ -672,10 +675,14 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected }) => {
 
   // Handle demon escape (lose a life)
   const handleDemonEscape = () => {
+    // Don't process escapes if game is already over or won
+    if (gameOverRef.current || victoryRef.current) return;
+
     livesRef.current--;
     setLives(livesRef.current);
-    if (livesRef.current <= 0 && !gameOver && !gameOverSoundPlayed.current) {
+    if (livesRef.current <= 0 && !gameOverRef.current && !gameOverSoundPlayed.current) {
       gameOverSoundPlayed.current = true;
+      gameOverRef.current = true; // Set ref immediately for synchronous check
       setGameOver(true);
       // Stop background music
       if (bgMusicRef.current) {
@@ -691,6 +698,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected }) => {
     killCount.current = 0;
     livesRef.current = MAX_LIVES;
     setLives(MAX_LIVES);
+    gameOverRef.current = false; // Reset ref for synchronous check
+    victoryRef.current = false; // Reset ref for synchronous check
     setGameOver(false);
     setVictory(false);
     victorySoundPlayed.current = false;
@@ -905,7 +914,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected }) => {
     const rightState = handStateRef.current['Right'];
 
     // Check for Grand Finale mode (both hands open) - only when game is active
-    const bothHandsOpen = !gameOver && !victory && leftState === HandState.OPEN && rightState === HandState.OPEN;
+    const bothHandsOpen = !gameOverRef.current && !victoryRef.current && leftState === HandState.OPEN && rightState === HandState.OPEN;
     grandFinaleRef.current.active = bothHandsOpen;
 
     // Ultimate Attack: SPECTACULAR explosions show (only when game is active)
@@ -1008,7 +1017,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected }) => {
     ctx.globalCompositeOperation = 'source-over';
 
     // Spawn new demons periodically (only if game is active)
-    if (!gameOver && !victory) {
+    if (!gameOverRef.current && !victoryRef.current) {
       const spawnInterval = Math.max(800, 2000 - killCount.current * 20); // Gets faster as you kill more
       if (now - lastDemonSpawn.current > spawnInterval && demons.current.length < 8) {
         spawnDemon();
@@ -1017,7 +1026,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected }) => {
     }
 
     // Clear all demons when IDOL POWER is active (only if game is active)
-    if (!gameOver && !victory && bothHandsOpen && demons.current.some((d: Demon) => !d.isDying)) {
+    if (!gameOverRef.current && !victoryRef.current && bothHandsOpen && demons.current.some((d: Demon) => !d.isDying)) {
       clearAllDemons();
     }
 
@@ -1027,7 +1036,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected }) => {
       const demon = demons.current[i];
 
       // Only update game logic if game is active
-      if (!gameOver && !victory) {
+      if (!gameOverRef.current && !victoryRef.current) {
         // Check if demon should escape (alive too long)
         if (demon.shouldEscape()) {
           demon.escape();
@@ -1125,12 +1134,12 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected }) => {
       }
 
       // Normal trigger (only when NOT in grand finale and game is active)
-      if (!bothHandsOpen && !gameOver && !victory) {
+      if (!bothHandsOpen && !gameOverRef.current && !victoryRef.current) {
         const prevState = prevHandStateRef.current[hand];
         const justOpened = state === HandState.OPEN && prevState !== HandState.OPEN;
         if (justOpened && now - lastTriggerTime.current[hand] > 250) {
           triggerExplosion(screenX, screenY);
-          killDemonsNearPoint(screenX, screenY, 120); // Kill demons near explosion
+          killDemonsNearPoint(screenX, screenY, 150); // Kill demons near explosion
           lastTriggerTime.current[hand] = now;
         }
       }

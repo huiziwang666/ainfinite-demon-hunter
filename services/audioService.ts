@@ -95,49 +95,104 @@ export class AudioEngine {
 
     const t = this.ctx.currentTime;
 
-    // Triumphant ascending fanfare
-    const notes = [523, 659, 784, 1047]; // C5, E5, G5, C6
-    const noteDuration = 0.15;
+    // Sparkle/shimmer effect - high frequency twinkles
+    for (let i = 0; i < 8; i++) {
+      const sparkle = this.ctx.createOscillator();
+      const sparkleGain = this.ctx.createGain();
+      sparkle.type = 'sine';
+      sparkle.frequency.value = 2000 + Math.random() * 2000;
+      sparkle.connect(sparkleGain);
+      sparkleGain.connect(this.masterGain);
+      const sparkleStart = t + i * 0.08;
+      sparkleGain.gain.setValueAtTime(0, sparkleStart);
+      sparkleGain.gain.linearRampToValueAtTime(0.15, sparkleStart + 0.02);
+      sparkleGain.gain.exponentialRampToValueAtTime(0.001, sparkleStart + 0.15);
+      sparkle.start(sparkleStart);
+      sparkle.stop(sparkleStart + 0.15);
+    }
 
-    notes.forEach((freq, i) => {
-      const osc = this.ctx!.createOscillator();
-      const gain = this.ctx!.createGain();
+    // K-pop style ascending arpeggio with layered synths
+    const arpNotes = [523, 659, 784, 880, 1047, 1319, 1568, 2093]; // C5 to C7 arpeggio
+    const arpDuration = 0.08;
 
-      osc.type = 'triangle';
-      osc.frequency.value = freq;
+    arpNotes.forEach((freq, i) => {
+      // Main synth (saw for brightness)
+      const osc1 = this.ctx!.createOscillator();
+      const gain1 = this.ctx!.createGain();
+      const filter = this.ctx!.createBiquadFilter();
 
-      osc.connect(gain);
-      gain.connect(this.masterGain!);
+      osc1.type = 'sawtooth';
+      osc1.frequency.value = freq;
+      filter.type = 'lowpass';
+      filter.frequency.value = 3000;
+      filter.Q.value = 2;
 
-      const noteStart = t + i * noteDuration;
-      gain.gain.setValueAtTime(0, noteStart);
-      gain.gain.linearRampToValueAtTime(0.4, noteStart + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.01, noteStart + noteDuration + 0.3);
+      osc1.connect(filter);
+      filter.connect(gain1);
+      gain1.connect(this.masterGain!);
 
-      osc.start(noteStart);
-      osc.stop(noteStart + noteDuration + 0.3);
+      const noteStart = t + 0.3 + i * arpDuration;
+      gain1.gain.setValueAtTime(0, noteStart);
+      gain1.gain.linearRampToValueAtTime(0.25, noteStart + 0.02);
+      gain1.gain.exponentialRampToValueAtTime(0.01, noteStart + arpDuration + 0.2);
+
+      osc1.start(noteStart);
+      osc1.stop(noteStart + arpDuration + 0.2);
+
+      // Sub layer (triangle for warmth)
+      const osc2 = this.ctx!.createOscillator();
+      const gain2 = this.ctx!.createGain();
+      osc2.type = 'triangle';
+      osc2.frequency.value = freq;
+      osc2.connect(gain2);
+      gain2.connect(this.masterGain!);
+      gain2.gain.setValueAtTime(0, noteStart);
+      gain2.gain.linearRampToValueAtTime(0.15, noteStart + 0.02);
+      gain2.gain.exponentialRampToValueAtTime(0.01, noteStart + arpDuration + 0.15);
+      osc2.start(noteStart);
+      osc2.stop(noteStart + arpDuration + 0.15);
     });
 
-    // Final chord
-    const chordFreqs = [523, 659, 784, 1047];
-    chordFreqs.forEach(freq => {
-      const osc = this.ctx!.createOscillator();
-      const gain = this.ctx!.createGain();
+    // Grand finale chord with rich harmonics
+    const chordStart = t + 0.3 + arpNotes.length * arpDuration;
+    const chordFreqs = [261, 329, 392, 523, 659, 784, 1047]; // Full C major chord
 
-      osc.type = 'sine';
-      osc.frequency.value = freq;
+    chordFreqs.forEach((freq) => {
+      // Layered oscillators for rich sound
+      ['sine', 'triangle'].forEach((type, j) => {
+        const osc = this.ctx!.createOscillator();
+        const gain = this.ctx!.createGain();
+        osc.type = type as OscillatorType;
+        osc.frequency.value = freq;
+        osc.connect(gain);
+        gain.connect(this.masterGain!);
 
-      osc.connect(gain);
-      gain.connect(this.masterGain!);
+        const volume = j === 0 ? 0.2 : 0.1;
+        gain.gain.setValueAtTime(0, chordStart);
+        gain.gain.linearRampToValueAtTime(volume, chordStart + 0.05);
+        gain.gain.setValueAtTime(volume, chordStart + 0.8);
+        gain.gain.exponentialRampToValueAtTime(0.001, chordStart + 2.0);
 
-      const chordStart = t + notes.length * noteDuration;
-      gain.gain.setValueAtTime(0, chordStart);
-      gain.gain.linearRampToValueAtTime(0.3, chordStart + 0.05);
-      gain.gain.exponentialRampToValueAtTime(0.01, chordStart + 1.5);
-
-      osc.start(chordStart);
-      osc.stop(chordStart + 1.5);
+        osc.start(chordStart);
+        osc.stop(chordStart + 2.0);
+      });
     });
+
+    // Final sparkle burst
+    for (let i = 0; i < 12; i++) {
+      const sparkle = this.ctx.createOscillator();
+      const sparkleGain = this.ctx.createGain();
+      sparkle.type = 'sine';
+      sparkle.frequency.value = 1500 + Math.random() * 3000;
+      sparkle.connect(sparkleGain);
+      sparkleGain.connect(this.masterGain);
+      const sparkleStart = chordStart + 0.1 + i * 0.05;
+      sparkleGain.gain.setValueAtTime(0, sparkleStart);
+      sparkleGain.gain.linearRampToValueAtTime(0.1, sparkleStart + 0.02);
+      sparkleGain.gain.exponentialRampToValueAtTime(0.001, sparkleStart + 0.2);
+      sparkle.start(sparkleStart);
+      sparkle.stop(sparkleStart + 0.2);
+    }
   }
 
   public playGameOver() {
@@ -145,54 +200,109 @@ export class AudioEngine {
 
     const t = this.ctx.currentTime;
 
-    // Sad descending notes
-    const notes = [392, 349, 311, 262]; // G4, F4, Eb4, C4
-    const noteDuration = 0.25;
+    // Dramatic impact hit
+    const impact = this.ctx.createOscillator();
+    const impactGain = this.ctx.createGain();
+    impact.type = 'sine';
+    impact.frequency.setValueAtTime(150, t);
+    impact.frequency.exponentialRampToValueAtTime(40, t + 0.3);
+    impact.connect(impactGain);
+    impactGain.connect(this.masterGain);
+    impactGain.gain.setValueAtTime(0.6, t);
+    impactGain.gain.exponentialRampToValueAtTime(0.01, t + 0.4);
+    impact.start(t);
+    impact.stop(t + 0.4);
+
+    // Descending "wah wah" brass-like sound (minor key)
+    const notes = [392, 311, 262, 196]; // G4, Eb4, C4, G3 - minor feel
+    const noteDuration = 0.35;
 
     notes.forEach((freq, i) => {
+      // Main tone with vibrato
       const osc = this.ctx!.createOscillator();
-      const gain = this.ctx!.createGain();
+      const oscGain = this.ctx!.createGain();
+      const filter = this.ctx!.createBiquadFilter();
 
-      osc.type = 'sine';
+      osc.type = 'sawtooth';
       osc.frequency.value = freq;
 
-      osc.connect(gain);
-      gain.connect(this.masterGain!);
+      // Wah filter effect
+      filter.type = 'lowpass';
+      filter.Q.value = 5;
 
-      const noteStart = t + i * noteDuration;
-      gain.gain.setValueAtTime(0, noteStart);
-      gain.gain.linearRampToValueAtTime(0.35, noteStart + 0.03);
-      gain.gain.exponentialRampToValueAtTime(0.01, noteStart + noteDuration + 0.2);
+      osc.connect(filter);
+      filter.connect(oscGain);
+      oscGain.connect(this.masterGain!);
+
+      const noteStart = t + 0.2 + i * noteDuration;
+
+      // Filter sweep for "wah" effect
+      filter.frequency.setValueAtTime(800, noteStart);
+      filter.frequency.exponentialRampToValueAtTime(200, noteStart + noteDuration);
+
+      oscGain.gain.setValueAtTime(0, noteStart);
+      oscGain.gain.linearRampToValueAtTime(0.3, noteStart + 0.05);
+      oscGain.gain.setValueAtTime(0.25, noteStart + noteDuration * 0.7);
+      oscGain.gain.exponentialRampToValueAtTime(0.01, noteStart + noteDuration + 0.1);
 
       osc.start(noteStart);
-      osc.stop(noteStart + noteDuration + 0.2);
+      osc.stop(noteStart + noteDuration + 0.1);
+
+      // Sub bass layer for depth
+      const sub = this.ctx!.createOscillator();
+      const subGain = this.ctx!.createGain();
+      sub.type = 'sine';
+      sub.frequency.value = freq / 2;
+      sub.connect(subGain);
+      subGain.connect(this.masterGain!);
+      subGain.gain.setValueAtTime(0, noteStart);
+      subGain.gain.linearRampToValueAtTime(0.2, noteStart + 0.05);
+      subGain.gain.exponentialRampToValueAtTime(0.01, noteStart + noteDuration);
+      sub.start(noteStart);
+      sub.stop(noteStart + noteDuration);
     });
 
-    // Low rumble at the end
+    // Final dramatic low rumble with pitch drop
+    const rumbleStart = t + 0.2 + notes.length * noteDuration;
+
+    // Deep bass drop
+    const bassDrop = this.ctx.createOscillator();
+    const bassGain = this.ctx.createGain();
+    bassDrop.type = 'sine';
+    bassDrop.frequency.setValueAtTime(80, rumbleStart);
+    bassDrop.frequency.exponentialRampToValueAtTime(25, rumbleStart + 1.2);
+    bassDrop.connect(bassGain);
+    bassGain.connect(this.masterGain);
+    bassGain.gain.setValueAtTime(0.5, rumbleStart);
+    bassGain.gain.exponentialRampToValueAtTime(0.01, rumbleStart + 1.2);
+    bassDrop.start(rumbleStart);
+    bassDrop.stop(rumbleStart + 1.2);
+
+    // Noise rumble
     const noise = this.ctx.createBufferSource();
-    const bufferSize = this.ctx.sampleRate * 0.8;
+    const bufferSize = this.ctx.sampleRate * 1.2;
     const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
     const data = buffer.getChannelData(0);
 
     for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * 0.3;
+      data[i] = (Math.random() * 2 - 1) * 0.4;
     }
     noise.buffer = buffer;
 
-    const filter = this.ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.value = 150;
+    const noiseFilter = this.ctx.createBiquadFilter();
+    noiseFilter.type = 'lowpass';
+    noiseFilter.frequency.setValueAtTime(300, rumbleStart);
+    noiseFilter.frequency.exponentialRampToValueAtTime(50, rumbleStart + 1.0);
 
-    const gain = this.ctx.createGain();
-    noise.connect(filter);
-    filter.connect(gain);
-    gain.connect(this.masterGain);
+    const noiseGain = this.ctx.createGain();
+    noise.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(this.masterGain);
 
-    const rumbleStart = t + notes.length * noteDuration;
-    gain.gain.setValueAtTime(0.5, rumbleStart);
-    gain.gain.exponentialRampToValueAtTime(0.01, rumbleStart + 0.8);
+    noiseGain.gain.setValueAtTime(0.4, rumbleStart);
+    noiseGain.gain.exponentialRampToValueAtTime(0.01, rumbleStart + 1.0);
 
     noise.start(rumbleStart);
-    noise.stop(rumbleStart + 0.8);
+    noise.stop(rumbleStart + 1.2);
   }
 }
