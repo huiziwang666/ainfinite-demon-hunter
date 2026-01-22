@@ -1084,11 +1084,13 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected, onModelLoaded 
     // Draw kill counter and progress - responsive positioning
     ctx.save();
     const counterFontSize = Math.max(14, Math.floor(24 * minScale));
-    const counterMargin = Math.max(15, 30 * minScale);
+    const sideMargin = Math.max(15, 30 * minScale);
+    // Use larger bottom margin on mobile to avoid browser UI overlap
+    const bottomMargin = width < 768 ? Math.max(60, 80 * minScale) : Math.max(20, 35 * minScale);
     ctx.font = `bold ${counterFontSize}px "Cinzel", serif`;
     ctx.textAlign = 'left';
     ctx.fillStyle = '#FF69B4';
-    ctx.fillText(`DEMONS SLAIN: ${killCount.current} / ${VICTORY_KILLS}`, counterMargin, height - counterMargin);
+    ctx.fillText(`DEMONS SLAIN: ${killCount.current} / ${VICTORY_KILLS}`, sideMargin, height - bottomMargin);
 
     // Draw combo counter if active
     if (comboCount.current > 1 && now - lastKillTime.current < COMBO_TIMEOUT) {
