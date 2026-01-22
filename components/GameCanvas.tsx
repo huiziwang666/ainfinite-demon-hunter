@@ -456,7 +456,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected, onModelLoaded 
   const handStateRef = useRef<{ [key: string]: HandState }>({ 'Left': HandState.UNKNOWN, 'Right': HandState.UNKNOWN });
   const prevHandStateRef = useRef<{ [key: string]: HandState }>({ 'Left': HandState.UNKNOWN, 'Right': HandState.UNKNOWN });
   const handPosRef = useRef<{ [key: string]: Point }>({ 'Left': {x:0,y:0}, 'Right': {x:0,y:0} });
+  const smoothedHandPosRef = useRef<{ [key: string]: Point }>({ 'Left': {x:0,y:0}, 'Right': {x:0,y:0} });
   const lastTriggerTime = useRef<{ [key: string]: number }>({ 'Left': 0, 'Right': 0 });
+  const SMOOTHING_FACTOR = 0.4; // Higher = more responsive, lower = smoother
   const grandFinaleRef = useRef<{ active: boolean; lastSpawn: number }>({ active: false, lastSpawn: 0 });
 
   // Demon spawning state
@@ -518,9 +520,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected, onModelLoaded 
 
       hands.setOptions({
         maxNumHands: 2,
-        modelComplexity: 0, // Use lite model for faster tracking
-        minDetectionConfidence: 0.5, // Lower threshold for better edge detection
-        minTrackingConfidence: 0.4
+        modelComplexity: 1, // Use full model for better accuracy
+        minDetectionConfidence: 0.6,
+        minTrackingConfidence: 0.5
       });
 
       hands.onResults((results: any) => {
@@ -538,8 +540,8 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected, onModelLoaded 
               await hands.send({ image: videoRef.current });
             }
           },
-          width: 480, // Balance between speed and coverage
-          height: 360
+          width: 640, // Better resolution for accuracy
+          height: 480
         });
         camera.start();
       }
@@ -571,11 +573,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected, onModelLoaded 
         const landmarks = results.multiHandLandmarks[i];
         const label = results.multiHandedness[i].label;
         foundHands.add(label);
-        
+
         const wrist = landmarks[0];
         const tips = [8, 12, 16, 20];
         let avgDist = 0;
-        
+
         tips.forEach(tipIdx => {
             const dx = landmarks[tipIdx].x - wrist.x;
             const dy = landmarks[tipIdx].y - wrist.y;
@@ -585,8 +587,17 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected, onModelLoaded 
 
         // Detection Logic: < 0.25 is fist, > 0.25 is open
         const newState = avgDist < 0.25 ? HandState.FIST : HandState.OPEN;
-        
+
+        // Store raw position for trigger detection
         handPosRef.current[label] = { x: wrist.x, y: wrist.y };
+
+        // Apply smoothing for visual display
+        const prev = smoothedHandPosRef.current[label];
+        smoothedHandPosRef.current[label] = {
+          x: prev.x + (wrist.x - prev.x) * SMOOTHING_FACTOR,
+          y: prev.y + (wrist.y - prev.y) * SMOOTHING_FACTOR
+        };
+
         handStateRef.current[label] = newState;
       }
 
@@ -605,15 +616,20 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected, onModelLoaded 
     const width = canvasRef.current.width;
     const height = canvasRef.current.height;
 
-    // Keep demons away from edges and UI areas
-    const margin = 150;
+    // Responsive scaling
+    const screenScale = Math.min(width / 1920, height / 1080);
+    const responsiveScale = Math.max(0.5, Math.min(1, screenScale));
+
+    // Keep demons away from edges and UI areas - responsive margins
+    const margin = Math.max(80, 150 * responsiveScale);
     const x = margin + Math.random() * (width - margin * 2);
     const y = margin + Math.random() * (height - margin * 2.5); // More margin at bottom for text
 
-    // Random size variation
-    const size = randomRange(70, 120);
+    // Responsive size variation
+    const baseSize = width < 768 ? randomRange(50, 80) : randomRange(70, 120);
+    const size = baseSize * responsiveScale;
 
-    const demon = new Demon(x, y, size);
+    const demon = new Demon(x, y, Math.max(40, size));
     demons.current.push(demon);
   };
 
@@ -622,8 +638,11 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected, onModelLoaded 
     screenShake.current = { intensity, duration, startTime: Date.now() };
   };
 
-  // Kill demons near an explosion point
-  const killDemonsNearPoint = (x: number, y: number, radius: number = 150) => {
+  // Kill demons near an explosion point (responsive radius)
+  const killDemonsNearPoint = (x: number, y: number, radius?: number) => {
+    const canvas = canvasRef.current;
+    const screenScale = canvas ? Math.max(0.6, Math.min(1, Math.min(canvas.width / 1920, canvas.height / 1080))) : 1;
+    const effectiveRadius = radius ?? Math.max(100, 150 * screenScale);
     const now = Date.now();
     let killsThisFrame = 0;
 
@@ -632,7 +651,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected, onModelLoaded 
         const dx = x - demon.x;
         const dy = y - demon.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < radius + demon.size * 0.5) {
+        if (dist < effectiveRadius + demon.size * 0.5) {
           demon.kill();
           killCount.current++;
           killsThisFrame++;
@@ -1062,12 +1081,14 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected, onModelLoaded 
     // Check victory condition
     checkVictory();
 
-    // Draw kill counter and progress
+    // Draw kill counter and progress - responsive positioning
     ctx.save();
-    ctx.font = `bold ${Math.max(18, Math.floor(24 * minScale))}px "Cinzel", serif`;
+    const counterFontSize = Math.max(14, Math.floor(24 * minScale));
+    const counterMargin = Math.max(15, 30 * minScale);
+    ctx.font = `bold ${counterFontSize}px "Cinzel", serif`;
     ctx.textAlign = 'left';
     ctx.fillStyle = '#FF69B4';
-    ctx.fillText(`DEMONS SLAIN: ${killCount.current} / ${VICTORY_KILLS}`, 30, height - 30);
+    ctx.fillText(`DEMONS SLAIN: ${killCount.current} / ${VICTORY_KILLS}`, counterMargin, height - counterMargin);
 
     // Draw combo counter if active
     if (comboCount.current > 1 && now - lastKillTime.current < COMBO_TIMEOUT) {
@@ -1088,19 +1109,29 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected, onModelLoaded 
     // Normal hand tracking
     ['Left', 'Right'].forEach(hand => {
       const state = handStateRef.current[hand];
-      const pos = handPosRef.current[hand];
+      const smoothedPos = smoothedHandPosRef.current[hand];
+      const rawPos = handPosRef.current[hand];
 
       // Expand coordinate range to reach screen edges (camera doesn't capture full 0-1 range)
       // Map 0.1-0.9 camera range to 0-1 screen range
-      const expandedX = Math.max(0, Math.min(1, (pos.x - 0.1) / 0.8));
-      const expandedY = Math.max(0, Math.min(1, (pos.y - 0.05) / 0.9));
+      // Use smoothed position for visual display
+      const expandedX = Math.max(0, Math.min(1, (smoothedPos.x - 0.1) / 0.8));
+      const expandedY = Math.max(0, Math.min(1, (smoothedPos.y - 0.05) / 0.9));
 
       const screenX = (1 - expandedX) * width; // Mirror X
       const screenY = expandedY * height;
 
+      // Raw position for trigger (immediate response)
+      const rawExpandedX = Math.max(0, Math.min(1, (rawPos.x - 0.1) / 0.8));
+      const rawExpandedY = Math.max(0, Math.min(1, (rawPos.y - 0.05) / 0.9));
+      const triggerX = (1 - rawExpandedX) * width;
+      const triggerY = rawExpandedY * height;
+
       // Draw Hand Indicator - Pink when open, Purple pulsing when fist (charging)
       if (state !== HandState.UNKNOWN) {
-          const baseSize = bothHandsOpen ? 22 : 18;
+          // Responsive cursor size
+          const cursorScale = Math.max(0.7, minScale);
+          const baseSize = (bothHandsOpen ? 22 : 18) * cursorScale;
 
           if (state === HandState.FIST) {
             // Pulsing charge effect when fist is made
@@ -1141,12 +1172,13 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected, onModelLoaded 
       }
 
       // Normal trigger (only when NOT in grand finale and game is active)
+      // Use raw (non-smoothed) position for immediate trigger response
       if (!bothHandsOpen && !gameOverRef.current && !victoryRef.current) {
         const prevState = prevHandStateRef.current[hand];
         const justOpened = state === HandState.OPEN && prevState !== HandState.OPEN;
         if (justOpened && now - lastTriggerTime.current[hand] > 250) {
-          triggerExplosion(screenX, screenY);
-          killDemonsNearPoint(screenX, screenY, 150); // Kill demons near explosion
+          triggerExplosion(triggerX, triggerY);
+          killDemonsNearPoint(triggerX, triggerY); // Kill demons near explosion (responsive radius)
           lastTriggerTime.current[hand] = now;
         }
       }
@@ -1186,30 +1218,30 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected, onModelLoaded 
         className="absolute top-0 left-0 w-full h-full cursor-none"
       />
 
-      {/* Lives display */}
-      <div className="absolute top-4 right-4 flex gap-2">
+      {/* Lives display - responsive */}
+      <div className="absolute top-2 right-2 sm:top-4 sm:right-4 flex gap-1 sm:gap-2">
         {Array.from({ length: MAX_LIVES }).map((_, i) => (
           <span
             key={i}
-            className={`text-3xl ${i < lives ? 'opacity-100' : 'opacity-30'}`}
+            className={`text-xl sm:text-2xl md:text-3xl ${i < lives ? 'opacity-100' : 'opacity-30'}`}
           >
             💜
           </span>
         ))}
       </div>
 
-      {/* Game Over Screen */}
+      {/* Game Over Screen - responsive */}
       {gameOver && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm z-50">
-          <div className="text-center p-8 border-2 border-red-500/60 rounded-3xl bg-red-950/60 backdrop-blur-md max-w-lg shadow-[0_0_100px_rgba(239,68,68,0.4)]">
-            <h1 className="text-5xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-red-400 via-pink-500 to-red-600 mb-4 animate-pulse">
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm z-50 p-4">
+          <div className="text-center p-4 sm:p-6 md:p-8 border-2 border-red-500/60 rounded-2xl sm:rounded-3xl bg-red-950/60 backdrop-blur-md max-w-[90vw] sm:max-w-lg shadow-[0_0_60px_rgba(239,68,68,0.4)] sm:shadow-[0_0_100px_rgba(239,68,68,0.4)]">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-red-400 via-pink-500 to-red-600 mb-2 sm:mb-4 animate-pulse">
               GAME OVER
             </h1>
-            <p className="text-2xl text-pink-300 mb-2">The demons have escaped!</p>
-            <p className="text-xl text-cyan-400 mb-8">Demons Slain: {killCount.current}</p>
+            <p className="text-lg sm:text-xl md:text-2xl text-pink-300 mb-1 sm:mb-2">The demons have escaped!</p>
+            <p className="text-base sm:text-lg md:text-xl text-cyan-400 mb-4 sm:mb-6 md:mb-8">Demons Slain: {killCount.current}</p>
             <button
               onClick={restartGame}
-              className="px-8 py-4 bg-gradient-to-r from-red-500 via-pink-500 to-purple-500 text-white font-bold text-xl rounded-full hover:from-red-400 hover:via-pink-400 hover:to-purple-400 transform hover:scale-110 transition-all shadow-[0_0_40px_rgba(239,68,68,0.6)] border border-pink-300/50"
+              className="px-6 py-3 sm:px-8 sm:py-4 bg-gradient-to-r from-red-500 via-pink-500 to-purple-500 text-white font-bold text-base sm:text-lg md:text-xl rounded-full hover:from-red-400 hover:via-pink-400 hover:to-purple-400 transform hover:scale-105 sm:hover:scale-110 transition-all shadow-[0_0_20px_rgba(239,68,68,0.6)] sm:shadow-[0_0_40px_rgba(239,68,68,0.6)] border border-pink-300/50"
             >
               TRY AGAIN
             </button>
@@ -1217,19 +1249,19 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected, onModelLoaded 
         </div>
       )}
 
-      {/* Victory Screen */}
+      {/* Victory Screen - responsive */}
       {victory && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm z-50">
-          <div className="text-center p-8 border-2 border-pink-400/60 rounded-3xl bg-purple-950/60 backdrop-blur-md max-w-lg shadow-[0_0_100px_rgba(236,72,153,0.4),0_0_60px_rgba(139,92,246,0.3)]">
-            <h1 className="text-5xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-fuchsia-400 to-cyan-400 mb-4 animate-pulse">
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm z-50 p-4">
+          <div className="text-center p-4 sm:p-6 md:p-8 border-2 border-pink-400/60 rounded-2xl sm:rounded-3xl bg-purple-950/60 backdrop-blur-md max-w-[90vw] sm:max-w-lg shadow-[0_0_60px_rgba(236,72,153,0.4)] sm:shadow-[0_0_100px_rgba(236,72,153,0.4),0_0_60px_rgba(139,92,246,0.3)]">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-fuchsia-400 to-cyan-400 mb-2 sm:mb-4 animate-pulse">
               VICTORY!
             </h1>
-            <p className="text-2xl text-cyan-300 mb-2">You are the Ultimate Idol!</p>
-            <p className="text-xl text-pink-400 mb-2">Demons Slain: {killCount.current}</p>
-            <p className="text-lg text-purple-300 mb-8">Lives Remaining: {lives}</p>
+            <p className="text-lg sm:text-xl md:text-2xl text-cyan-300 mb-1 sm:mb-2">You are the Ultimate Idol!</p>
+            <p className="text-base sm:text-lg md:text-xl text-pink-400 mb-1 sm:mb-2">Demons Slain: {killCount.current}</p>
+            <p className="text-sm sm:text-base md:text-lg text-purple-300 mb-4 sm:mb-6 md:mb-8">Lives Remaining: {lives}</p>
             <button
               onClick={restartGame}
-              className="px-8 py-4 bg-gradient-to-r from-pink-500 via-fuchsia-500 to-purple-500 text-white font-bold text-xl rounded-full hover:from-pink-400 hover:via-fuchsia-400 hover:to-purple-400 transform hover:scale-110 transition-all shadow-[0_0_40px_rgba(236,72,153,0.6)] border border-pink-300/50"
+              className="px-6 py-3 sm:px-8 sm:py-4 bg-gradient-to-r from-pink-500 via-fuchsia-500 to-purple-500 text-white font-bold text-base sm:text-lg md:text-xl rounded-full hover:from-pink-400 hover:via-fuchsia-400 hover:to-purple-400 transform hover:scale-105 sm:hover:scale-110 transition-all shadow-[0_0_20px_rgba(236,72,153,0.6)] sm:shadow-[0_0_40px_rgba(236,72,153,0.6)] border border-pink-300/50"
             >
               PLAY AGAIN
             </button>
