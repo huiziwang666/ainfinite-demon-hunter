@@ -1,0 +1,7 @@
+{
+  "name": "AInfinite Demon Hunter",
+  "description": "A gesture-controlled demon hunting experience with neon aesthetics, using Hand Tracking and Web Audio.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
