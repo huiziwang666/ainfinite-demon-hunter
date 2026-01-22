@@ -16,6 +16,7 @@ const App = () => {
   const [loading, setLoading] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState('');
   const [cameraActive, setCameraActive] = useState(false);
+  const [modelLoaded, setModelLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [assetsPreloaded, setAssetsPreloaded] = useState(false);
 
@@ -126,11 +127,25 @@ const App = () => {
 
   return (
     <div className="relative w-full h-screen bg-black overflow-hidden">
-      <GameCanvas onHandsDetected={setCameraActive} />
-      
+      <GameCanvas onHandsDetected={setCameraActive} onModelLoaded={() => setModelLoaded(true)} />
+
       {!cameraActive && (
-        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-cyan-500/80 text-xl font-mono animate-pulse tracking-widest">
-          WAITING FOR HAND SIGNAL...
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
+          {!modelLoaded ? (
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-12 h-12 border-4 border-pink-500 border-t-transparent rounded-full animate-spin"></div>
+              <div className="text-pink-400 text-xl font-mono animate-pulse tracking-widest">
+                LOADING HAND TRACKING...
+              </div>
+              <div className="text-purple-400/60 text-sm">
+                First load may take a moment
+              </div>
+            </div>
+          ) : (
+            <div className="text-cyan-500/80 text-xl font-mono animate-pulse tracking-widest">
+              SHOW YOUR HANDS TO START!
+            </div>
+          )}
         </div>
       )}
     </div>

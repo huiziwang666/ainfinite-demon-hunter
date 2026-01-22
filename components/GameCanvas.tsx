@@ -431,9 +431,10 @@ const KPOP_TEXT_LINE2 = "Idol Power Unleashed";
 
 interface GameCanvasProps {
   onHandsDetected: (detected: boolean) => void;
+  onModelLoaded?: () => void;
 }
 
-const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected }) => {
+const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected, onModelLoaded }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const audioRef = useRef<AudioEngine | null>(null);
@@ -522,7 +523,13 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected }) => {
         minTrackingConfidence: 0.4
       });
 
-      hands.onResults(onResults);
+      hands.onResults((results: any) => {
+        onResults(results);
+        // Call onModelLoaded on first successful result (model is ready)
+        if (onModelLoaded && results.multiHandLandmarks !== undefined) {
+          onModelLoaded();
+        }
+      });
 
       if (videoRef.current) {
         const camera = new Camera(videoRef.current, {
