@@ -5,7 +5,7 @@ import { AudioEngine } from '../services/audioService';
 // Game constants
 const MAX_LIVES = 3;
 const VICTORY_KILLS = 20;
-const DEMON_ESCAPE_TIME = 5000; // 5 seconds before demon escapes
+const DEMON_ESCAPE_TIME = 8000; // 8 seconds before demon escapes
 
 // --- Configuration & Helpers ---
 
@@ -445,6 +445,7 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected, onModelLoaded 
   // Game State
   const particles = useRef<Particle[]>([]);
   const [lives, setLives] = useState(MAX_LIVES);
+  const [idolPowerUses, setIdolPowerUses] = useState(3);
   const [gameOver, setGameOver] = useState(false);
   const [victory, setVictory] = useState(false);
   const gameOverRef = useRef(false);
@@ -460,6 +461,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected, onModelLoaded 
   const lastTriggerTime = useRef<{ [key: string]: number }>({ 'Left': 0, 'Right': 0 });
   const SMOOTHING_FACTOR = 0.4; // Higher = more responsive, lower = smoother
   const grandFinaleRef = useRef<{ active: boolean; lastSpawn: number }>({ active: false, lastSpawn: 0 });
+  const idolPowerUsesRef = useRef<number>(3); // Max 3 idol power uses
+  const idolPowerActiveRef = useRef<boolean>(false); // Track if currently using idol power
+  const MAX_IDOL_POWER = 3;
 
   // Demon spawning state
   const demons = useRef<Demon[]>([]);
@@ -724,6 +728,9 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected, onModelLoaded 
     killCount.current = 0;
     livesRef.current = MAX_LIVES;
     setLives(MAX_LIVES);
+    idolPowerUsesRef.current = MAX_IDOL_POWER;
+    setIdolPowerUses(MAX_IDOL_POWER);
+    idolPowerActiveRef.current = false;
     gameOverRef.current = false; // Reset ref for synchronous check
     victoryRef.current = false; // Reset ref for synchronous check
     setGameOver(false);
@@ -939,8 +946,20 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected, onModelLoaded 
     const leftState = handStateRef.current['Left'];
     const rightState = handStateRef.current['Right'];
 
-    // Check for Grand Finale mode (both hands open) - only when game is active
-    const bothHandsOpen = !gameOverRef.current && !victoryRef.current && leftState === HandState.OPEN && rightState === HandState.OPEN;
+    // Check for Grand Finale mode (both hands open) - only when game is active and uses remain
+    const handsOpen = !gameOverRef.current && !victoryRef.current && leftState === HandState.OPEN && rightState === HandState.OPEN;
+
+    // Track idol power activation - consume a use when first activated
+    if (handsOpen && !idolPowerActiveRef.current && idolPowerUsesRef.current > 0) {
+      idolPowerActiveRef.current = true;
+      idolPowerUsesRef.current--;
+      setIdolPowerUses(idolPowerUsesRef.current);
+    } else if (!handsOpen) {
+      idolPowerActiveRef.current = false;
+    }
+
+    // Only allow idol power if currently active (has uses)
+    const bothHandsOpen = handsOpen && idolPowerActiveRef.current;
     grandFinaleRef.current.active = bothHandsOpen;
 
     // Ultimate Attack: SPECTACULAR explosions show (only when game is active)
@@ -1220,16 +1239,36 @@ const GameCanvas: React.FC<GameCanvasProps> = ({ onHandsDetected, onModelLoaded 
         className="absolute top-0 left-0 w-full h-full cursor-none"
       />
 
-      {/* Lives display - responsive */}
-      <div className="absolute top-2 right-2 sm:top-4 sm:right-4 flex gap-1 sm:gap-2">
-        {Array.from({ length: MAX_LIVES }).map((_, i) => (
-          <span
-            key={i}
-            className={`text-xl sm:text-2xl md:text-3xl ${i < lives ? 'opacity-100' : 'opacity-30'}`}
-          >
-            💜
-          </span>
-        ))}
+      {/* Lives and Idol Power display - responsive */}
+      <div className="absolute top-2 right-2 sm:top-4 sm:right-4 flex flex-col items-end gap-2 sm:gap-3">
+        {/* Lives */}
+        <div className="flex flex-col items-end gap-0.5">
+          <span className="text-[10px] sm:text-xs text-pink-400/80 font-bold tracking-wider">LIVES</span>
+          <div className="flex gap-1 sm:gap-2">
+            {Array.from({ length: MAX_LIVES }).map((_, i) => (
+              <span
+                key={i}
+                className={`text-xl sm:text-2xl md:text-3xl ${i < lives ? 'opacity-100' : 'opacity-30'}`}
+              >
+                💜
+              </span>
+            ))}
+          </div>
+        </div>
+        {/* Idol Power */}
+        <div className="flex flex-col items-end gap-0.5">
+          <span className="text-[10px] sm:text-xs text-cyan-400/80 font-bold tracking-wider">IDOL POWER</span>
+          <div className="flex gap-1 sm:gap-2">
+            {Array.from({ length: MAX_IDOL_POWER }).map((_, i) => (
+              <span
+                key={i}
+                className={`text-xl sm:text-2xl md:text-3xl ${i < idolPowerUses ? 'opacity-100' : 'opacity-30'}`}
+              >
+                ⚡
+              </span>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* Game Over Screen - responsive */}
